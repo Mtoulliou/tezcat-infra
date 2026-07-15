@@ -709,6 +709,7 @@ Je n'oublie pas d'ajouter la route des VPN.
 ```
 sudo ip route add 10.0.0.0/16 via 10.1.0.3
 ```
+A RENDRE PERSISTANT !!!
 
 #### Wireguard 
 
@@ -793,6 +794,26 @@ sudo wg-quick up wg0
 Je lance le serveur.
 ```
 sudo systemctl enable --now wg-quick@wg0
+```
+
+RESEAU D'ADMIN A PART ???
+
+#### Durcissement des VMS
+
+J'insalle Ansible sur mon pc administrateur 
+```
+sudo apt install -y ansible
+```
+
+Je monte le tunnel
+```
+sudo wg-quick up wg0
+```
+Je copie les fichiers inventory.ini, asible.cfg et harden.yml  
+Je teste la connectivité : 
+```
+cd ansible/
+ansible all_vms -m ping
 ```
 
 #### Edge (Nginx)

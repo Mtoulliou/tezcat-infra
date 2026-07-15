@@ -1,0 +1,60 @@
+---
+# ==========================================================================
+#  TEZCAT — Durcissement de base des 8 VM
+#  Applique : paquets de base, fuseau horaire, SSH clé-only,
+#             fail2ban, mises à jour de sécurité automatiques
+# ==========================================================================
+- name: Durcissement de base
+  hosts: all_vms
+  become: true
+
+  tasks:
+    - name: Mettre à jour l'index des paquets
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Installer les paquets de base
+      ansible.builtin.apt:
+        name:
+          - fail2ban
+          - unattended-upgrades
+          - qemu-guest-agent
+        state: present
+
+    - name: Régler le fuseau horaire
+      ansible.builtin.command: timedatectl set-timezone Europe/Paris
+      changed_when: false
+
+    - name: Durcir SSH (pas de root, pas de mot de passe)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-hardening.conf
+        content: |
+          PermitRootLogin no
+          PasswordAuthentication no
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Redémarrer ssh
+
+    - name: Activer fail2ban
+      ansible.builtin.service:
+        name: fail2ban
+        state: started
+        enabled: true
+
+    - name: Activer les mises à jour de sécurité automatiques
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        owner: root
+        group: root
+        mode: "0644"
+
+  handlers:
+    - name: Redémarrer ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
