@@ -816,9 +816,50 @@ cd ansible/
 ansible all_vms -m ping
 ```
 
-#### Edge (Nginx)
+#### Edge
+
+Ajout d'une route pour le focntionnement de l'admiistration par vpn de facon permanente : 
+```
+sudo tee /etc/systemd/system/tezcat-route-vpn.service << 'EOF'
+[Unit]
+Description=Route retour vers les clients WireGuard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip route add 10.0.0.0/16 via 10.1.0.3
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now tezcat-route-vpn.service
+```
 
 #### Gitlab 
 
+#### IA
 
+Ajout d'une route pour le focntionnement de l'admiistration par vpn de facon permanente : 
+```
+sudo tee /etc/systemd/system/tezcat-route-vpn.service << 'EOF'
+[Unit]
+Description=Route retour vers les clients WireGuard
+After=network-online.target
+Wants=network-online.target
 
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip route add 10.0.0.0/16 via 10.3.0.1
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now tezcat-route-vpn.service
+```
