@@ -9,6 +9,28 @@
   become: true
 
   tasks:
+    - name: Créer le dossier de configuration systemd-resolved
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configurer le DNS (systemd-resolved)
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/99-tezcat-dns.conf
+        content: |
+          [Resolve]
+          DNS=1.1.1.1 1.0.0.1
+          FallbackDNS=9.9.9.9
+        mode: "0644"
+      notify: Redémarrer systemd-resolved
+
+    - name: Empêcher cloud-init de réécrire la config réseau
+      ansible.builtin.copy:
+        dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        content: "network: {config: disabled}\n"
+        mode: "0644"
+
     - name: Mettre à jour l'index des paquets
       ansible.builtin.apt:
         update_cache: true
@@ -53,8 +75,40 @@
         group: root
         mode: "0644"
 
+    - name: Route retour vers les clients WireGuard (zones DMZ/DMZCLIENT)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/tezcat-route-vpn.service
+        content: |
+          [Unit]
+          Description=Route retour vers les clients WireGuard
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/sbin/ip route replace 10.0.0.0/16 via {{ wg_gateway }}
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
+      when: inventory_hostname in (groups['dmz'] + groups['dmzclient'] + groups['fw'])
+      notify: Activer la route VPN
+
   handlers:
+    - name: Redémarrer systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: restarted
+
     - name: Redémarrer ssh
       ansible.builtin.service:
         name: ssh
         state: restarted
+
+    - name: Activer la route VPN
+      ansible.builtin.systemd:
+        name: tezcat-route-vpn
+        enabled: true
+        state: restarted
+        daemon_reload: true
