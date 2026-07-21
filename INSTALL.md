@@ -709,7 +709,6 @@ Je n'oublie pas d'ajouter la route des VPN.
 ```
 sudo ip route add 10.0.0.0/16 via 10.1.0.3
 ```
-A RENDRE PERSISTANT !!!
 
 #### Wireguard 
 

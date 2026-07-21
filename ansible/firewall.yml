@@ -1,0 +1,102 @@
+---
+# ==========================================================================
+#  TEZCAT — Configuration du firewall (nftables + routage + route VPN)
+#  Transposition de la procédure manuelle en playbook rejouable.
+#
+#  Usage :
+#    ansible-playbook firewall.yml --check     # répétition générale
+#    ansible-playbook firewall.yml             # application réelle
+# ==========================================================================
+- name: Configuration du firewall
+  hosts: fw
+  become: true
+
+  vars:
+    wg_gateway: 10.1.0.3        # VM WireGuard : prochain saut vers les clients VPN
+    vpn_network: 10.0.0.0/16    # plages VPN (Admin / Dev / Shield)
+
+  tasks:
+
+    # ------------------------- nftables ---------------------------------
+    - name: Installer nftables
+      ansible.builtin.apt:
+        name: nftables
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # --------------------- IP forwarding (routage) ----------------------
+    - name: Activer l'IP forwarding (persistant)
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_file: /etc/sysctl.d/99-tezcat-fw.conf
+        sysctl_set: true
+        reload: true
+
+    # ------------------- Configuration des règles -----------------------
+    - name: Déployer /etc/nftables.conf
+      ansible.builtin.copy:
+        src: firewall/nftables.conf          # fichier local, versionné dans Git
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: "0600"
+        validate: /usr/sbin/nft -c -f %s   # refuse d'écrire si la syntaxe est invalide
+      notify: Recharger nftables
+
+    - name: Activer nftables au démarrage
+      ansible.builtin.service:
+        name: nftables
+        state: started
+        enabled: true
+
+    # ------------- Route retour vers les clients WireGuard --------------
+    # Sans elle, les réponses aux clients VPN se perdent.
+    - name: Déployer le service de route VPN
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/tezcat-route-vpn.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Route retour vers les clients WireGuard
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/sbin/ip route replace {{ vpn_network }} via {{ wg_gateway }}
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Recharger systemd
+
+    - name: Activer le service de route VPN
+      ansible.builtin.systemd_service:
+        name: tezcat-route-vpn.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # ---------------------- Vérifications -------------------------------
+    - name: Vérifier que la route VPN est présente
+      ansible.builtin.command: ip route show {{ vpn_network }}
+      register: route_check
+      changed_when: false
+
+    - name: Afficher la route VPN
+      ansible.builtin.debug:
+        msg: "Route VPN : {{ route_check.stdout | default('ABSENTE ⚠️') }}"
+
+  handlers:
+    - name: Recharger nftables
+      ansible.builtin.service:
+        name: nftables
+        state: reloaded
+
+    - name: Recharger systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true

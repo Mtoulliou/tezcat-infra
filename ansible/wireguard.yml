@@ -1,0 +1,148 @@
+---
+# ==========================================================================
+#  TEZCAT — Configuration du bastion WireGuard
+#
+#  Stratégie clés : la clé privée serveur est GÉNÉRÉE SUR L'HÔTE et n'en sort
+#  jamais. Ansible la lit au moment du déploiement pour construire wg0.conf.
+#  => aucune clé privée dans Git, aucune dans les variables Ansible.
+#
+#  Usage :
+#    ansible-playbook wireguard.yml --check
+#    ansible-playbook wireguard.yml
+# ==========================================================================
+- name: Configuration du bastion WireGuard
+  hosts: wireguard
+  become: true
+
+  vars:
+    wg_port: 51820
+    wg_addresses: "10.0.0.1/24, 10.0.1.1/24, 10.0.2.1/24"   # Admin / Dev / Shield
+    dmz_network: 10.1.0.0/24
+    dmzclient_network: 10.3.0.0/24
+    vpn_admin: 10.0.0.0/24
+    vpn_dev: 10.0.1.0/24
+    vpn_shield: 10.0.2.0/24
+
+    # Pairs autorisés — la clé PUBLIQUE seule est ici (non sensible)
+    wg_peers:
+      - name: "Matteo — Admin"
+        public_key: "an1vz56hyvuDiPS94ylmZVdiArdUkqyToraJ/ugttSM="
+        allowed_ips: "10.0.0.10/32"
+      # - name: "Dev 1"
+      #   public_key: "..."
+      #   allowed_ips: "10.0.1.10/32"
+      # - name: "Shield client X"
+      #   public_key: "..."
+      #   allowed_ips: "10.0.2.10/32"
+
+  tasks:
+
+    # --------------------------- Paquets --------------------------------
+    - name: Installer WireGuard
+      ansible.builtin.apt:
+        name: wireguard
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ---------------------- IP forwarding (routage) ---------------------
+    - name: Activer l'IP forwarding (persistant)
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_file: /etc/sysctl.d/99-wg.conf
+        sysctl_set: true
+        reload: true
+
+    # ------------------- Clés serveur (générées sur place) --------------
+    - name: Vérifier si la clé privée serveur existe
+      ansible.builtin.stat:
+        path: /etc/wireguard/server_private.key
+      register: wg_privkey
+
+    - name: Générer la paire de clés serveur (une seule fois)
+      ansible.builtin.shell: |
+        umask 077
+        wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
+      when: not wg_privkey.stat.exists
+      changed_when: true
+
+    - name: Sécuriser les permissions des clés
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - /etc/wireguard/server_private.key
+        - /etc/wireguard/server_public.key
+
+    - name: Lire la clé privée serveur (depuis l'hôte, jamais depuis Git)
+      ansible.builtin.slurp:
+        src: /etc/wireguard/server_private.key
+      register: wg_private_raw
+      no_log: true          # ne jamais afficher la clé dans les logs Ansible
+
+    - name: Lire la clé publique serveur (à distribuer aux clients)
+      ansible.builtin.slurp:
+        src: /etc/wireguard/server_public.key
+      register: wg_public_raw
+
+    # --------------------- Configuration wg0.conf -----------------------
+    - name: Déployer /etc/wireguard/wg0.conf
+      ansible.builtin.copy:
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          # Généré par Ansible — ne pas éditer à la main
+          [Interface]
+          Address    = {{ wg_addresses }}
+          ListenPort = {{ wg_port }}
+          PrivateKey = {{ wg_private_raw.content | b64decode | trim }}
+
+          # Routage
+          PostUp = sysctl -w net.ipv4.ip_forward=1
+
+          # --- Filtrage par profil (le bastion touche DMZ + DMZCLIENT
+          #     directement, il doit donc appliquer la politique) ---
+          # Admins : accès DMZ autorisé
+          PostUp = iptables -A FORWARD -i wg0 -s {{ vpn_admin }} -d {{ dmz_network }} -j ACCEPT
+          PostUp = iptables -A FORWARD -i wg0 -d {{ dmz_network }} -j DROP
+          # Admins : accès DMZCLIENT autorisé
+          PostUp = iptables -A FORWARD -i wg0 -s {{ vpn_admin }} -d {{ dmzclient_network }} -j ACCEPT
+          PostUp = iptables -A FORWARD -i wg0 -d {{ dmzclient_network }} -j DROP
+
+          PostDown = iptables -D FORWARD -i wg0 -s {{ vpn_admin }} -d {{ dmz_network }} -j ACCEPT
+          PostDown = iptables -D FORWARD -i wg0 -d {{ dmz_network }} -j DROP
+          PostDown = iptables -D FORWARD -i wg0 -s {{ vpn_admin }} -d {{ dmzclient_network }} -j ACCEPT
+          PostDown = iptables -D FORWARD -i wg0 -d {{ dmzclient_network }} -j DROP
+
+          {% for peer in wg_peers %}
+          [Peer]
+          # {{ peer.name }}
+          PublicKey  = {{ peer.public_key }}
+          AllowedIPs = {{ peer.allowed_ips }}
+
+          {% endfor %}
+      no_log: true          # le contenu contient la clé privée
+      notify: Redémarrer wg0
+
+    # ------------------------- Service ----------------------------------
+    - name: Activer et démarrer wg-quick@wg0
+      ansible.builtin.service:
+        name: wg-quick@wg0
+        state: started
+        enabled: true
+
+    # ---------------------- Info pour les clients -----------------------
+    - name: Afficher la clé PUBLIQUE du serveur (à mettre dans les confs clients)
+      ansible.builtin.debug:
+        msg: "Clé publique serveur : {{ wg_public_raw.content | b64decode | trim }}"
+
+  handlers:
+    - name: Redémarrer wg0
+      ansible.builtin.service:
+        name: wg-quick@wg0
+        state: restarted
