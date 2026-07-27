@@ -1,0 +1,120 @@
+---
+# ==========================================================================
+#  TEZCAT — Déploiement de GitLab CE (disque + stack Docker)
+#  Un seul playbook : prépare le disque de données, puis déploie GitLab.
+#
+#  Prérequis : docker.yml déjà appliqué sur la VM gitlab.
+#  Accès (pour l'instant) : http://10.2.0.2  (VPN uniquement)
+#
+#  Collections requises :
+#    ansible-galaxy collection install community.general community.docker ansible.posix
+#
+#  Usage :
+#    ansible-playbook gitlab.yml --check
+#    ansible-playbook gitlab.yml
+# ==========================================================================
+- name: Déploiement de GitLab CE
+  hosts: gitlab
+  become: true
+
+  vars:
+    # --- Disque ---
+    data_disk: /dev/sdb            # ⚠️ vérifier avec `lsblk` (le 50 Go vide !)
+    gitlab_root: /srv/gitlab
+
+    # --- GitLab ---
+    # ⚠️ Épingler une version stable (voir hub.docker.com/r/gitlab/gitlab-ce/tags)
+    gitlab_image: "gitlab/gitlab-ce:latest"
+    gitlab_ip: "10.2.0.2"
+    gitlab_ssh_port: 2222          # port SSH git (22 est déjà pris par l'hôte)
+
+  tasks:
+
+    # ======================= PRÉPARATION DU DISQUE ======================
+    - name: Vérifier que le disque de données existe
+      ansible.builtin.stat:
+        path: "{{ data_disk }}"
+      register: disk_stat
+
+    - name: Échouer si le disque est absent
+      ansible.builtin.fail:
+        msg: "{{ data_disk }} introuvable — vérifier Terraform."
+      when: not disk_stat.stat.exists
+
+    - name: Formater en ext4 (SEULEMENT si vierge — anti-perte de données)
+      community.general.filesystem:
+        fstype: ext4
+        dev: "{{ data_disk }}"
+        opts: -L gitlab-data       # force:false par défaut → ne reformate jamais
+
+    - name: Monter le disque (permanent, par label)
+      ansible.posix.mount:
+        path: "{{ gitlab_root }}"
+        src: "LABEL=gitlab-data"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+
+    # ======================= ARBORESCENCE VOLUMES =======================
+    - name: Créer les dossiers de volumes GitLab
+      ansible.builtin.file:
+        path: "{{ gitlab_root }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - config
+        - logs
+        - data
+        - config/ssl
+
+    # ================= CERTIFICAT AUTO-SIGNÉ (443) ======================
+    - name: Générer un certificat auto-signé pour {{ gitlab_ip }}
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -nodes -days 825 -newkey rsa:2048
+          -keyout {{ gitlab_root }}/config/ssl/{{ gitlab_ip }}.key
+          -out {{ gitlab_root }}/config/ssl/{{ gitlab_ip }}.crt
+          -subj "/CN={{ gitlab_ip }}"
+          -addext "subjectAltName=IP:{{ gitlab_ip }}"
+        creates: "{{ gitlab_root }}/config/ssl/{{ gitlab_ip }}.crt"
+
+    # ========================= STACK GITLAB =============================
+    - name: Déployer le docker-compose.yml
+      ansible.builtin.copy:
+        dest: "{{ gitlab_root }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          services:
+            gitlab:
+              image: {{ gitlab_image }}
+              container_name: gitlab
+              restart: unless-stopped
+              hostname: '{{ gitlab_ip }}'
+              shm_size: '256m'
+              environment:
+                GITLAB_OMNIBUS_CONFIG: |
+                  external_url 'https://{{ gitlab_ip }}'
+                  nginx['redirect_http_to_https'] = true
+                  nginx['ssl_certificate'] = "/etc/gitlab/ssl/{{ gitlab_ip }}.crt"
+                  nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/{{ gitlab_ip }}.key"
+                  letsencrypt['enable'] = false
+                  gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
+              ports:
+                - '443:443'
+                - '{{ gitlab_ssh_port }}:22'
+              volumes:
+                - '{{ gitlab_root }}/config:/etc/gitlab'
+                - '{{ gitlab_root }}/logs:/var/log/gitlab'
+                - '{{ gitlab_root }}/data:/var/opt/gitlab'
+
+    - name: Démarrer la stack GitLab
+      community.docker.docker_compose_v2:
+        project_src: "{{ gitlab_root }}"
+        state: present
+
+    - name: Rappel — GitLab met plusieurs minutes à démarrer au premier boot
+      ansible.builtin.debug:
+        msg: >-
+          GitLab démarre (2-5 min). Accès : https://{{ gitlab_ip }} (via VPN,
+          avertissement certificat auto-signé à accepter). Mot de passe root :
+          docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password

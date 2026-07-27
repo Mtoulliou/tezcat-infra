@@ -1,0 +1,92 @@
+---
+# ==========================================================================
+#  TEZCAT — Installation de Docker + plugin Compose
+#  Cible : VM applicatives (edge, gitlab, elk, app, ia) — PAS firewall/wireguard
+#
+#  Prérequis inventaire — ajouter ce groupe dans inventory.ini :
+#    [docker_hosts]
+#    edge
+#    gitlab
+#    elk
+#    app
+#    ia
+#
+#  Usage :
+#    ansible-playbook docker.yml --check
+#    ansible-playbook docker.yml
+# ==========================================================================
+- name: Installation de Docker
+  hosts: docker_hosts
+  become: true
+
+  vars:
+    docker_users:
+      - tezcatadmin 
+  tasks:
+    - name: Installer les prérequis
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Créer le dossier des clés apt
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Ajouter la clé GPG Docker
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Ajouter le dépôt Docker
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/debian
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        architectures: amd64
+        signed_by: /etc/apt/keyrings/docker.asc
+        state: present
+        enabled: true
+      # ⚠️ Si Docker n'a pas encore de paquets pour "trixie" (Debian 13),
+      #    remplacer {{ ansible_distribution_release }} par "bookworm".
+
+    - name: Installer Docker Engine + plugin Compose
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Activer et démarrer Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Ajouter les utilisateurs au groupe docker
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: docker
+        append: true
+      loop: "{{ docker_users }}"
+
+    - name: Vérifier l'installation
+      ansible.builtin.command: docker compose version
+      register: compose_version
+      changed_when: false
+
+    - name: Afficher la version
+      ansible.builtin.debug:
+        msg: "{{ compose_version.stdout }}"

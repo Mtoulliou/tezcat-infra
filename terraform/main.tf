@@ -249,6 +249,12 @@ resource "proxmox_virtual_environment_vm" "gitlab" {
     interface    = "scsi0"
   }
 
+  disk {
+    datastore_id = "hdd-mirror"
+    interface    = "scsi1"
+    size         = 50
+  }
+
   initialization {
     datastore_id = "local"
     ip_config {

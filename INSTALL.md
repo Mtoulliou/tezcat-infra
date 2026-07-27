@@ -665,52 +665,41 @@ terraform apply
 
 ### Ansible 
 
+#### Durcissement des VMS
+
+J'insalle Ansible sur mon pc administrateur 
+```
+sudo apt install -y ansible
+```
+
+Je monte le tunnel
+```
+sudo wg-quick up wg0
+```
+
+Je teste la connectivité : 
+```
+cd ansible/
+ansible all_vms -m ping
+```
+
+Je lance le playbook ansible harden.yml:
+```
+asible-playbook harden.yml
+```
+
 #### Firewall 
 
-Je me connacte au firewall 
-```
-ssh tezcatadmin@192.168.1.27
-```
+A VOIR CAR IL FAUT SUREMENT AVANT DE COMMENCER ANSIBLE ?
 
-J'installe nftables
+Je lance le playbook ansible firewall.yml
 ```
-sudo apt update && sudo apt install -y nftables
-```
-
-J'active l'ip forwarding. 
-```
-echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-tezcat-fw.conf
-```
-
-(Sur mon PC) Copie du fichier de configuration nftables sur le firewall.
-```
-scp ansible/nftables.conf tezcatadmin@192.168.1.27:/tmp/nftables.conf
-```
-
-Sur le FW : 
-```
-sudo mv /tmp/nftables.conf /etc/nftables.conf
-sudo chown root:root /etc/nftables.conf
-sudo chmod 600 /etc/nftables.conf
-```
-
-
-J'applique la configuration : 
-```
-sudo nft -f /etc/nftables.conf
-```
-
-J'active la configuration : 
-```
-sudo systemctl enable nftables
-```
-
-Je n'oublie pas d'ajouter la route des VPN. 
-```
-sudo ip route add 10.0.0.0/16 via 10.1.0.3
+ansible-playbook firewall.yml
 ```
 
 #### Wireguard 
+
+A PRECISER CAR Y A UN ANSIBLE MAIS UNE HISTOIRE DE CLE
 
 Je me connecte à la vm en SSH depuis le firewall.
 ```
@@ -795,70 +784,26 @@ Je lance le serveur.
 sudo systemctl enable --now wg-quick@wg0
 ```
 
-RESEAU D'ADMIN A PART ???
+### Docker 
 
-#### Durcissement des VMS
-
-J'insalle Ansible sur mon pc administrateur 
+J'installe docker sur toutes les VMs : 
 ```
-sudo apt install -y ansible
-```
-
-Je monte le tunnel
-```
-sudo wg-quick up wg0
-```
-Je copie les fichiers inventory.ini, asible.cfg et harden.yml  
-Je teste la connectivité : 
-```
-cd ansible/
-ansible all_vms -m ping
-```
-
-#### Edge
-
-Ajout d'une route pour le focntionnement de l'admiistration par vpn de facon permanente : 
-```
-sudo tee /etc/systemd/system/tezcat-route-vpn.service << 'EOF'
-[Unit]
-Description=Route retour vers les clients WireGuard
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/sbin/ip route add 10.0.0.0/16 via 10.1.0.3
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now tezcat-route-vpn.service
+ansible-playbook docker.yml
 ```
 
 #### Gitlab 
 
+Lancer le playbook : 
+```
+ansible-playbook gitlab.yml
+```
+
+Puis aller checher le mdp root : 
+```
+ssh tezcatadmin@10.2.0.2
+docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
+```
+### EDGE
+
+
 #### IA
-
-Ajout d'une route pour le focntionnement de l'admiistration par vpn de facon permanente : 
-```
-sudo tee /etc/systemd/system/tezcat-route-vpn.service << 'EOF'
-[Unit]
-Description=Route retour vers les clients WireGuard
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/sbin/ip route add 10.0.0.0/16 via 10.3.0.1
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now tezcat-route-vpn.service
-```
