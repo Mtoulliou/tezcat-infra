@@ -803,6 +803,28 @@ Puis aller checher le mdp root :
 ssh tezcatadmin@10.2.0.2
 docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
 ```
+
+Configuration du gitlab avec terraform : 
+```
+cd terraform-gitlab/
+cp terraform.tvars.example terraform.tvars
+nano terrform.tvars
+```
+Coller dans ce fichier le token gitlab trouvé dans : 
+```
+User -> Preferences -> Burger menu -> Access -> Personal Access Token -> New 
+Token Name : terraform 
+Expiration date : Max 
+Slect scopes : API
+Generate and copy token
+```
+
+```
+terraform init
+terraform plan 
+terraform apply
+```
+
 ### EDGE
 
 

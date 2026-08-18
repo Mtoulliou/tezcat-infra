@@ -1,0 +1,3 @@
+# Copier en terraform.tfvars (qui est dans .gitignore) et compléter.
+# Token créé dans GitLab : User Settings → Access Tokens → scope "api"
+gitlab_token = "glpat-xxxxxxxxxxxxxxxxxxxx"
