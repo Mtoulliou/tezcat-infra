@@ -1,0 +1,18 @@
+stages:
+  - validate
+
+terraform-check:
+  stage: validate
+  image: hashicorp/terraform:latest
+  script:
+    - cd terraform
+    - terraform fmt -check -recursive
+    - terraform validate
+  allow_failure: true    # au début, pour ne pas bloquer sur des détails
+
+hello:
+  stage: validate
+  image: alpine:latest
+  script:
+    - echo "Premier pipeline TEZCAT qui tourne 🎉"
+    - echo "Runner opérationnel, CI en place."

@@ -1,0 +1,116 @@
+---
+# ==========================================================================
+#  TEZCAT — GitLab Runner (executor Docker, sur la VM gitlab)
+#
+#  Prérequis :
+#   1. Docker installé sur la VM gitlab (docker.yml déjà appliqué)
+#   2. Runner créé dans l'UI GitLab (Admin → CI/CD → Runners → New instance
+#      runner) → récupérer le token d'authentification `glrt-...`
+#   3. Mettre ce token dans terraform.tfvars-style : ici via --extra-vars
+#      ou un fichier vault (NE PAS le committer en clair)
+#
+#  Usage :
+#    ansible-playbook runner.yml -e "runner_token=glrt-xxxxxxxx" --check
+#    ansible-playbook runner.yml -e "runner_token=glrt-xxxxxxxx"
+# ==========================================================================
+- name: Déploiement du GitLab Runner
+  hosts: gitlab
+  become: true
+
+  vars:
+    runner_root: /srv/gitlab-runner       # config sur le disque de données
+    gitlab_url: "https://10.2.0.2"
+    runner_concurrent: 1                   # 1 seul job à la fois (RAM limitée)
+    job_memory_limit: "1g"                 # plafond RAM par job
+    default_image: "docker:24"             # image par défaut si le job n'en déclare pas
+    # runner_token fourni via --extra-vars (jamais en dur ici)
+
+  tasks:
+    - name: Vérifier que le token est fourni
+      ansible.builtin.assert:
+        that: runner_token is defined and runner_token | length > 0
+        fail_msg: "Fournir le token : -e 'runner_token=glrt-...'"
+
+    - name: Créer les dossiers du Runner
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ runner_root }}"
+        - "{{ runner_root }}/config"
+        - "{{ runner_root }}/config/certs"
+
+    - name: Copier le certificat auto-signé de GitLab pour le Runner (confiance TLS)
+      ansible.builtin.copy:
+        src: /srv/gitlab/config/ssl/10.2.0.2.crt
+        remote_src: true                      # le fichier est déjà sur la VM gitlab
+        dest: "{{ runner_root }}/config/certs/10.2.0.2.crt"
+        mode: "0644"
+
+    - name: Déployer le docker-compose.yml du Runner
+      ansible.builtin.copy:
+        dest: "{{ runner_root }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          services:
+            runner:
+              image: gitlab/gitlab-runner:latest
+              container_name: gitlab-runner
+              restart: unless-stopped
+              volumes:
+                - '{{ runner_root }}/config:/etc/gitlab-runner'
+                - '/var/run/docker.sock:/var/run/docker.sock'
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+
+    - name: Démarrer le conteneur Runner
+      community.docker.docker_compose_v2:
+        project_src: "{{ runner_root }}"
+        state: present
+
+    - name: Vérifier si le Runner est déjà enregistré (idempotence)
+      ansible.builtin.stat:
+        path: "{{ runner_root }}/config/config.toml"
+      register: runner_config
+
+    - name: Enregistrer le Runner auprès de GitLab
+      ansible.builtin.command:
+        cmd: >-
+          docker exec gitlab-runner gitlab-runner register
+          --non-interactive
+          --url "{{ gitlab_url }}"
+          --token "{{ runner_token }}"
+          --tls-ca-file "/etc/gitlab-runner/certs/10.2.0.2.crt"
+          --executor "docker"
+          --docker-image "{{ default_image }}"
+          --docker-privileged="false"
+          --docker-volumes "/var/run/docker.sock:/var/run/docker.sock"
+          --docker-memory "{{ job_memory_limit }}"
+      when: >-
+        not runner_config.stat.exists or
+        (runner_config.stat.size | default(0)) < 100
+      register: register_result
+      changed_when: "'Runner registered successfully' in register_result.stdout"
+
+    - name: Régler la concurrence (nombre de jobs simultanés)
+      ansible.builtin.replace:
+        path: "{{ runner_root }}/config/config.toml"
+        regexp: '^concurrent = .*'
+        replace: 'concurrent = {{ runner_concurrent }}'
+      notify: Redémarrer le Runner
+
+    - name: Rappel
+      ansible.builtin.debug:
+        msg: >-
+          Runner déployé. Vérifier dans GitLab : Admin → CI/CD → Runners
+          (le Runner doit apparaître avec une pastille verte).
+
+  handlers:
+    - name: Redémarrer le Runner
+      community.docker.docker_compose_v2:
+        project_src: "{{ runner_root }}"
+        state: restarted

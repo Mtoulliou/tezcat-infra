@@ -825,6 +825,16 @@ terraform plan
 terraform apply
 ```
 
+#### Gitlab Runner
+
+Crée le Runner dans l'UI (l'étape manuelle) → Admin Area → CI/CD → Runners → New instance runner → coche « Run untagged jobs » → récupère le token glrt-...
+
+Lance le playbook en passant le token en argument (jamais en dur dans le fichier) :
+ansible-playbook runner.yml -e "runner_token=glrt-xxxxxxxx" --check
+ansible-playbook runner.yml -e "runner_token=glrt-xxxxxxxx"
+
+Vérifie dans Admin → CI/CD → Runners : ton Runner doit apparaître avec une pastille verte 🟢
+
 ### EDGE
 
 

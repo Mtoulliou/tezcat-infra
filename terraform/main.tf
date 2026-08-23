@@ -237,7 +237,7 @@ resource "proxmox_virtual_environment_vm" "gitlab" {
     cores = 4
   }
   memory {
-    dedicated = 6144
+    dedicated = 7168
   }
 
   network_device {
