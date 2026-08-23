@@ -29,12 +29,12 @@ resource "gitlab_project" "tezcat" {
   visibility_level = "private"
 
   # Hygiène de dépôt
-  default_branch                   = "main"
-  initialize_with_readme           = false # false → permet un premier push depuis un dépôt local existant
-  shared_runners_enabled           = true
+  default_branch                        = "main"
+  initialize_with_readme                = false # false → permet un premier push depuis un dépôt local existant
+  shared_runners_enabled                = true
   only_allow_merge_if_pipeline_succeeds = false # à passer à true quand la CI sera en place
-  remove_source_branch_after_merge = true
-  squash_option                    = "default_off"
+  remove_source_branch_after_merge      = true
+  squash_option                         = "default_off"
 }
 
 # ----------------- Protection de la branche main -------------------------

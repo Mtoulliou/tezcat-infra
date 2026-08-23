@@ -11,7 +11,7 @@ locals {
     matteo = {
       name     = "Matteo"
       email    = "matteo.meze@gmail.com"
-      is_admin = true                  # admin de l'instance GitLab
+      is_admin = true # admin de l'instance GitLab
     }
     maxime = {
       name     = "Maxime"

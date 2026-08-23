@@ -10,7 +10,7 @@ variable "pve_api_token" {
 }
 
 locals {
-  ssh_key   = trimspace(file(pathexpand("~/.ssh/tezcat_ed25519.pub")))
-  template  = 9000
-  node      = "pve01"
+  ssh_key  = trimspace(file(pathexpand("~/.ssh/tezcat_ed25519.pub")))
+  template = 9000
+  node     = "pve01"
 }

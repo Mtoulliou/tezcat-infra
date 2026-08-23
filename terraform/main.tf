@@ -32,7 +32,7 @@ resource "proxmox_virtual_environment_vm" "firewall" {
   } # net3 - DMZCLIENT
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -98,7 +98,7 @@ resource "proxmox_virtual_environment_vm" "wireguard" {
   } # net1 - DMZCLIENT
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -150,7 +150,7 @@ resource "proxmox_virtual_environment_vm" "shield_test" {
   } # net1 - LAN client simulé
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -200,7 +200,7 @@ resource "proxmox_virtual_environment_vm" "edge" {
   }
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -245,7 +245,7 @@ resource "proxmox_virtual_environment_vm" "gitlab" {
   }
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -296,7 +296,7 @@ resource "proxmox_virtual_environment_vm" "elk" {
   }
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -341,7 +341,7 @@ resource "proxmox_virtual_environment_vm" "app" {
   }
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
@@ -386,12 +386,12 @@ resource "proxmox_virtual_environment_vm" "ia" {
   }
 
   disk {
-    datastore_id = "local"     # ton SSD (type Répertoire)
+    datastore_id = "local" # ton SSD (type Répertoire)
     interface    = "scsi0"
   }
 
   initialization {
-    datastore_id = "local"     # ← AJOUTER cette ligne en haut du bloc
+    datastore_id = "local" # ← AJOUTER cette ligne en haut du bloc
     ip_config {
       ipv4 {
         address = "10.3.0.2/24"
