@@ -40,7 +40,7 @@ resource "gitlab_user" "admins" {
   username         = each.key
   email            = each.value.email
   is_admin         = each.value.is_admin
-  password = data.sops_file.secrets.data["initial_password"]  
+  password         = data.sops_file.secrets.data["initial_password"]
   projects_limit   = 100
   can_create_group = true
   state            = "active"
@@ -62,7 +62,7 @@ resource "gitlab_user" "devs" {
   username         = each.key
   email            = each.value.email
   is_admin         = false
-  password = data.sops_file.secrets.data["initial_password"]  
+  password         = data.sops_file.secrets.data["initial_password"]
   projects_limit   = 20
   can_create_group = false
   state            = "active"

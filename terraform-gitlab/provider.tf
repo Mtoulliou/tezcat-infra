@@ -18,6 +18,6 @@ terraform {
 
 provider "gitlab" {
   base_url = var.gitlab_url
-  token = data.sops_file.secrets.data["gitlab_token"]
+  token    = data.sops_file.secrets.data["gitlab_token"]
   insecure = true # certificat auto-signé — retirer une fois le vrai cert en place (P6)
 }
