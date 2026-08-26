@@ -1,20 +1,83 @@
+# ==========================================================================
+#  TEZCAT — Pipeline de validation
+#  À chaque push : vérifie la qualité du code. NE DÉPLOIE RIEN.
+#  (le déploiement automatique viendra plus tard, avec le backend d'état)
+# ==========================================================================
+
 stages:
   - validate
 
-terraform-check:
+# --------------------------------------------------------------------------
+#  Terraform — formatage + validation syntaxique
+# --------------------------------------------------------------------------
+terraform:fmt:
   stage: validate
   image:
     name: hashicorp/terraform:latest
-    entrypoint: [""]   
+    entrypoint: [""]
   script:
-    - cd terraform
-    - terraform fmt -check -recursive
-    - terraform validate
-  allow_failure: true    # au début, pour ne pas bloquer sur des détails
+    - echo "Vérification du formatage Terraform..."
+    - terraform fmt -check -recursive -diff
+  # bloquant : un code mal formaté fait échouer le pipeline
 
-hello:
+terraform:validate:
+  stage: validate
+  image:
+    name: hashicorp/terraform:latest
+    entrypoint: [""]
+  script:
+    - for dir in terraform terraform-gitlab; do
+        echo "=== Validation de $dir ===";
+        cd "$dir";
+        terraform init -backend=false;
+        terraform validate;
+        cd ..;
+      done
+  # -backend=false : pas besoin de l'état distant pour valider la syntaxe
+
+# --------------------------------------------------------------------------
+#  Ansible — vérification syntaxique des playbooks
+# --------------------------------------------------------------------------
+ansible:lint:
+  stage: validate
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet ansible ansible-lint
+  script:
+    - cd ansible
+    - echo "Vérification syntaxique des playbooks..."
+    - for pb in harden firewall wireguard docker gitlab runner; do
+        if [ -f "$pb.yml" ]; then
+          echo "--- $pb.yml ---";
+          ansible-playbook "$pb.yml" --syntax-check -i inventory.ini || true;
+        fi;
+      done
+  allow_failure: true   # ansible-lint est strict → non-bloquant au début
+
+# --------------------------------------------------------------------------
+#  Sécurité — vérifier qu'aucun secret en clair n'a été committé
+# --------------------------------------------------------------------------
+secrets:check:
   stage: validate
   image: alpine:latest
   script:
-    - echo "Premier pipeline TEZCAT qui tourne 🎉"
-    - echo "Runner opérationnel, CI en place."
+    - echo "Recherche de secrets en clair..."
+    - apk add --no-cache grep
+    # Les fichiers secrets/ DOIVENT être chiffrés (contenir ENC[)
+    - |
+      for f in secrets/*.yaml; do
+        [ -f "$f" ] || continue
+        if ! grep -q "ENC\[" "$f"; then
+          echo "❌ ERREUR : $f n'est pas chiffré !";
+          exit 1;
+        fi
+        echo "✅ $f est chiffré";
+      done
+    # Aucun token/clé en clair ne doit traîner dans le code
+    - |
+      if grep -rniE "glpat-[a-zA-Z0-9]|terraform-token=[a-zA-Z0-9]|AGE-SECRET-KEY" \
+         --include="*.tf" --include="*.tfvars" --include="*.yml" . ; then
+        echo "❌ ERREUR : secret en clair détecté !";
+        exit 1;
+      fi
+    - echo "✅ Aucun secret en clair détecté"
