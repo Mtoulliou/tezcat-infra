@@ -1,0 +1,7 @@
+creation_rules:
+  # Tous les fichiers *.enc.yaml et secrets/*.yaml sont chiffrés pour ces clés
+  - path_regex: (\.enc\.yaml|secrets/.*\.yaml)$
+    key_groups:
+      - age:
+          - age1cwtksg76thn0722tu6ln0hfh6gr3jwf0vu6r40up42u9e2r7edpq46tye9   # Matteo
+          - age1fylqydyk6gryht3tr9fnk9pahlvv6rv5m47wsat6t90nxgt0uyrsm3pv49    # Runner CI

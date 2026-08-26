@@ -1,7 +1,18 @@
+# Terraform
 *.tfvars
+!*.tfvars.example
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Clés privées — JAMAIS dans Git
 *.key
-*.pub
-!*.tfvars.example
+tezcat_ed25519
+# Clés age privées (tous emplacements)
+*age*.txt
+keys.txt
+*-age.txt
+age-key*.txt
+# Déchiffrés temporaires SOPS
+*.dec.yaml
+secrets.auto.tfvars
