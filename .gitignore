@@ -16,3 +16,4 @@ age-key*.txt
 # Déchiffrés temporaires SOPS
 *.dec.yaml
 secrets.auto.tfvars
+!ssh_keys.auto.tfvars

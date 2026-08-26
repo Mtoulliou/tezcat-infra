@@ -1,0 +1,1 @@
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAFCHB4hhuBpc9yUr7k4Aq46eiRgnFvcqpffme9B7eJ7 matteo@tezcat"
