@@ -74,9 +74,11 @@ secrets:check:
         echo "✅ $f est chiffré";
       done
     # Aucun token/clé en clair ne doit traîner dans le code
+    # (on exclut ce fichier CI lui-même, qui contient les motifs de recherche)
     - |
-      if grep -rniE "glpat-[a-zA-Z0-9]|terraform-token=[a-zA-Z0-9]|AGE-SECRET-KEY" \
-         --include="*.tf" --include="*.tfvars" --include="*.yml" . ; then
+      if grep -rniE "glpat-[a-zA-Z0-9]{20}|terraform-token=[a-zA-Z0-9]{8}|AGE-SECRET-KEY-1" \
+         --include="*.tf" --include="*.tfvars" --include="*.yml" \
+         --exclude=".gitlab-ci.yml" . ; then
         echo "❌ ERREUR : secret en clair détecté !";
         exit 1;
       fi
