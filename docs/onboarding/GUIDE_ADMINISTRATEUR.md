@@ -14,7 +14,6 @@ Proxmox, et toutes les VM en SSH.
 - [ ] La **clé publique du serveur WireGuard**
 - [ ] L'**adresse du VPN** et le port `51820`
 - [ ] Ton **IP VPN attribuée** (plage admin `10.0.0.x`)
-- [ ] Accès au **coffre Bitwarden partagé** (secrets d'infrastructure)
 
 ---
 
@@ -108,47 +107,47 @@ cat ~/.ssh/tezcat_ed25519.pub    # ← à transmettre à l'admin qui t'enrôle
 > Mets une **passphrase** sur ta clé. Utilise `ssh-agent` pour ne pas la retaper :
 > `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/tezcat_ed25519`
 
-### Configuration SSH pratique
+---
 
-`~/.ssh/config` :
-```
-Host firewall
-    HostName 192.168.1.27
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
+## Étape 3bis — Clé age (accès aux secrets chiffrés)
 
-Host wireguard
-    HostName 10.1.0.3
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
+L'infrastructure gère ses secrets avec **SOPS + age** : ils sont versionnés dans
+Git, mais chiffrés. Pour lancer un `terraform apply` (qui lit ces secrets), tu as
+besoin de ta propre clé age.
 
-Host gitlab
-    HostName 10.2.0.2
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
-
-Host elk
-    HostName 10.2.0.1
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
-
-Host app
-    HostName 10.2.0.3
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
-
-Host edge
-    HostName 10.1.0.1
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
-
-Host ia
-    HostName 10.3.0.2
-    User tezcatadmin
-    IdentityFile ~/.ssh/tezcat_ed25519
+### Installer les outils
+```bash
+sudo apt install -y age
+# sops : binaire officiel (voir github.com/getsops/sops/releases pour la version)
+SOPS_VERSION="v3.9.0"
+curl -LO "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64"
+sudo mv "sops-${SOPS_VERSION}.linux.amd64" /usr/local/bin/sops && sudo chmod +x /usr/local/bin/sops
 ```
 
-Ensuite : `ssh gitlab`, `ssh firewall`, etc.
+### Générer ta clé
+```bash
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+cat ~/.config/sops/age/keys.txt | grep "public key"    # ← clé PUBLIQUE à transmettre
+```
+
+> 🔑 Sauvegarde `keys.txt` dans ton gestionnaire de secrets personnel (Bitwarden
+>    ou autre). Perdue, tu ne peux plus déchiffrer
+>    aucun secret (il faudra qu'un autre admin re-chiffre pour ta nouvelle clé).
+> 🔑 Transmets **uniquement la clé publique** (`age1...`) à l'admin qui t'enrôle.
+
+### Une fois ta clé autorisée
+
+Quand l'admin a ajouté ta clé publique au `.sops.yaml` et re-chiffré, tu peux :
+```bash
+sops --decrypt secrets/proxmox.yaml     # lire un secret
+sops secrets/proxmox.yaml               # éditer un secret (re-chiffré à la sauvegarde)
+```
+Terraform lit les secrets automatiquement via le provider SOPS (ta clé est trouvée
+à `~/.config/sops/age/keys.txt`).
+
+> Détail complet dans `GUIDE_SOPS.md`.
 
 ---
 
@@ -202,8 +201,8 @@ cd terraform-gitlab/    # users, groupes, projets GitLab
 terraform plan
 terraform apply
 ```
-> Les fichiers `terraform.tfvars` (tokens) ne sont pas dans Git → à récupérer
-> dans Bitwarden.
+> Les secrets (tokens Proxmox/GitLab) sont chiffrés dans `secrets/` via SOPS et
+> déchiffrés automatiquement par ta clé age — rien à récupérer ailleurs.
 
 ### Ansible (configuration des VM)
 ```bash
@@ -243,10 +242,9 @@ Terraform ne sait plus ce qu'il gère. Il n'est pas dans Git — sauvegarde-le.
 
 En tant qu'administrateur, tu as accès à l'ensemble de l'infrastructure :
 
-- **Ne partage jamais** tes clés privées (SSH, WireGuard) ni tes mots de passe.
-- **Ne commite jamais de secret** dans Git (vérifie avec
-  `git ls-files | grep -E '\.(key|tfvars|tfstate)'` avant de pousser).
-- Les secrets partagés vivent dans **Bitwarden**, nulle part ailleurs.
+- **Ne partage jamais** tes clés privées (SSH, WireGuard, age) ni tes mots de passe.
+- **Ne commite jamais de secret en clair** dans Git — les secrets passent par SOPS
+  (la CI vérifie automatiquement qu'aucun secret en clair n'est poussé).
 - Signale immédiatement toute suspicion de compromission (clé perdue, poste volé).
 - Documente ce que tu modifies — l'infrastructure est en code, tout changement
   passe par un commit.

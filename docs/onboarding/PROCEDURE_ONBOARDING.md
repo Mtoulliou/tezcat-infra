@@ -15,8 +15,12 @@ Ajouter quelqu'un = **modifier deux fichiers** et lancer deux commandes :
 |---------|-------------------|----------|
 | `terraform-gitlab/users.tf` | le compte GitLab + son niveau d'accès | `terraform apply` |
 | `ansible/wireguard.yml` | le pair VPN (clé publique + IP) | `ansible-playbook wireguard.yml` |
+| `.sops.yaml` *(admins only)* | sa clé publique age (accès aux secrets) | `sops updatekeys` |
 
 Tout est versionné → `git log` te dit qui a eu accès à quoi et quand.
+
+> ℹ️ La clé age n'est nécessaire que pour les **administrateurs** (ils manipulent
+> les secrets chiffrés). Un développeur n'en a pas besoin au départ.
 
 ---
 
@@ -43,6 +47,7 @@ Envoie-lui le guide correspondant (`GUIDE_DEVELOPPEUR.md` ou
 
 - sa **clé publique WireGuard** (obligatoire)
 - sa **clé publique SSH** (administrateurs uniquement, pour l'accès aux VM)
+- sa **clé publique age** (administrateurs uniquement, pour déchiffrer les secrets)
 
 > 🔑 Refuse toute clé **privée** qu'on t'enverrait : c'est une erreur de sécurité,
 > il faut regénérer la paire.
@@ -82,8 +87,9 @@ terraform plan      # vérifier : uniquement des ajouts, aucun "destroy"
 terraform apply
 ```
 
-> Le mot de passe temporaire est celui de `var.initial_password`
-> (dans `terraform.tfvars`). La personne doit le changer à sa 1ʳᵉ connexion.
+> Le mot de passe temporaire est celui de `initial_password`
+> (chiffré dans `secrets/gitlab.yaml` via SOPS). La personne doit le changer
+> à sa 1ʳᵉ connexion.
 
 **Différence de droits :**
 - Dev → `developer` sur le groupe : peut cloner et pousser sur des branches,
@@ -144,12 +150,40 @@ ansible-playbook harden.yml
 
 ---
 
+## Étape 4bis — (Administrateurs uniquement) Autoriser sa clé age
+
+Pour qu'un admin puisse déchiffrer les secrets (SOPS), ajoute sa clé publique age
+dans `.sops.yaml` (à la racine du dépôt infra) :
+
+```yaml
+creation_rules:
+  - path_regex: (\.enc\.yaml|secrets/.*\.yaml)$
+    key_groups:
+      - age:
+          - age1...matteo
+          - age1...maxime          # ← nouvelle clé publique age
+          - age1...runner
+```
+
+Puis **re-chiffre tous les secrets** pour inclure sa clé :
+```bash
+find secrets/ -name '*.yaml' -exec sops updatekeys -y {} \;
+```
+
+À partir de là, la personne peut déchiffrer les secrets avec sa clé privée age.
+
+> ⚠️ Sans cette étape, l'admin aura accès aux VM (SSH) mais **pas** aux secrets
+> chiffrés → ses `terraform apply` échoueront au déchiffrement SOPS.
+
+---
+
 ## Étape 5 — Transmettre les informations
 
 Envoie à la personne :
 
 - [ ] Le **guide** correspondant à son profil
-- [ ] Son **identifiant GitLab** + le mot de passe temporaire (via Bitwarden, pas par mail)
+- [ ] Son **identifiant GitLab** + le mot de passe temporaire (via un canal sécurisé
+      : partage Bitwarden, gestionnaire de secrets, ou en personne — jamais par mail/chat)
 - [ ] La **clé publique du serveur WireGuard** :
       `ansible wireguard -m command -a "cat /etc/wireguard/server_public.key" --become`
 - [ ] L'**adresse du VPN** + port `51820`
@@ -212,13 +246,21 @@ terraform apply
 ansible-playbook harden.yml
 ```
 
-**4. Libérer son IP VPN** dans le tableau d'attribution, et **committer** :
+**4. (Admins) Retirer sa clé age** de `.sops.yaml`, puis re-chiffrer :
+```bash
+find secrets/ -name '*.yaml' -exec sops updatekeys -y {} \;
+```
+→ il ne peut plus déchiffrer les nouvelles versions des secrets.
+
+**5. Libérer son IP VPN** dans le tableau d'attribution, et **committer** :
 ```bash
 git commit -m "chore(access): révocation de Prénom Nom"
 ```
 
-> 🔴 Si la personne avait un accès **administrateur**, considère aussi la rotation
-> des secrets partagés qu'elle connaissait (token Proxmox, mots de passe d'infra).
+> 🔴 Si la personne avait un accès **administrateur**, elle a pu déchiffrer et
+> **copier** des secrets par le passé. Retirer sa clé age empêche les accès
+> futurs, mais ne rend pas les anciens secrets sûrs → **fais tourner les secrets
+> sensibles** qu'elle connaissait (token Proxmox, token GitLab, mots de passe).
 
 ---
 
@@ -229,6 +271,7 @@ git commit -m "chore(access): révocation de Prénom Nom"
 | Compte GitLab | `terraform-gitlab/users.tf` | `terraform apply` |
 | Accès VPN | `ansible/wireguard.yml` | `ansible-playbook wireguard.yml` |
 | Accès SSH (admins) | `ansible/harden.yml` | `ansible-playbook harden.yml` |
+| Accès secrets (admins) | `.sops.yaml` | `sops updatekeys` |
 | Traçabilité | `runbook_wireguard_pair.md` + commit | `git commit` |
 
 **Le principe :** aucun clic manuel. Tout passe par le code, tout est versionné,
