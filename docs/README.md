@@ -2,6 +2,40 @@
 
 ![Schémas d'Infrastructure Global](TEZCAT_INFRA.drawio.svg)
 
+> **Firewall-as-a-Service pour PME** — infrastructure auto-hébergée, entièrement en code.
+> Ce README est la **référence d'architecture** (services, flux, réseau). Pour le
+> reste, voir la documentation ci-dessous.
+
+## 📚 Documentation
+
+| Tu cherches... | Va voir |
+|----------------|---------|
+| **L'état du projet & la suite** | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| **Redéployer l'infra (ordre)** | [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md) |
+| **Le rapport de construction détaillé** | [`docs/BUILD_REPORT.md`](docs/BUILD_REPORT.md) |
+| **Démarrer comme dev** | [`docs/onboarding/GUIDE_DEVELOPPEUR.md`](docs/onboarding/GUIDE_DEVELOPPEUR.md) |
+| **Démarrer comme admin** | [`docs/onboarding/GUIDE_ADMINISTRATEUR.md`](docs/onboarding/GUIDE_ADMINISTRATEUR.md) |
+| **Ajouter un utilisateur** | [`docs/onboarding/PROCEDURE_ONBOARDING.md`](docs/onboarding/PROCEDURE_ONBOARDING.md) |
+| **Gérer les secrets (SOPS)** | [`docs/secrets/GUIDE_SOPS.md`](docs/secrets/GUIDE_SOPS.md) |
+| **Ajouter/révoquer un pair VPN** | [`docs/runbooks/wireguard_pair.md`](docs/runbooks/wireguard_pair.md) |
+| **Fiche détaillée d'un service** | [`docs/services/`](docs/services/) |
+
+### État des services
+
+| Service | VM | Responsable | État |
+|---------|-----|-------------|------|
+| Firewall (nftables) | FIREWALL | Matteo | ✅ déployé |
+| WireGuard | WIREGUARD | Matteo | ✅ déployé |
+| GitLab + Runner | GITLAB | Matteo | ✅ déployé |
+| SOPS/age | (hôtes) | Matteo | ✅ en place |
+| ELK | ELK | **Max** | ⬜ à déployer |
+| Web (Front/Back/BDD) | EDGE + APP | **Jules** | ⬜ à déployer |
+| IA | IA | — | ⬜ à venir |
+| Shield | SHIELD-TEST | — | ⬜ à venir |
+
+---
+
+
 ## Services de l'infrastructures
 
 ### Proxmox
@@ -235,3 +269,28 @@ Les utilisateur sont répartis en 4 groupes.
 | Test |  10.0.2.0/24 | ELK,(IA) | Aucun
 | Clients |  10.0.3.0-10.0.255.0/24 | ELK,(IA) | Aucun
 
+
+---
+
+## Structure de la documentation
+
+```
+infra/
+├── README.md                 ← ce fichier (référence d'architecture)
+├── TEZCAT_INFRA.drawio.svg   ← schéma global
+├── docs/
+│   ├── ROADMAP.md            État d'avancement & prochaines étapes
+│   ├── DEPLOIEMENT.md        Ordre de déploiement (rebuild)
+│   ├── BUILD_REPORT.md       Rapport de construction détaillé (ex-INSTALL.md)
+│   ├── onboarding/           Guides dev & admin, procédure d'ajout
+│   ├── services/             Fiche détaillée par service (même gabarit)
+│   ├── secrets/              SOPS/age : guide & intégration Terraform
+│   └── runbooks/             Procédures opérationnelles (pair WireGuard…)
+├── terraform/                VM Proxmox
+├── terraform-gitlab/         Users/groupes/projets GitLab
+├── ansible/                  Playbooks de configuration
+└── secrets/                  Secrets chiffrés SOPS (*.yaml)
+```
+
+> **Principes** : tout en code · secrets via SOPS (jamais en clair, vérifié par la CI) ·
+> clés privées jamais dans Git · pas de sur-ingénierie (complexité ajoutée au besoin réel).

@@ -74,7 +74,7 @@ Garder la console Proxmox ouverte lors des premiers runs.
 
 ### 4. Fournir sa configuration au client
 
-R�cupérer la **clé publique du serveur** (affichée en fin de playbook, ou) :
+R�cupérer la **clé publique du serveur** (affichée en fin de playbook, ou) :
 
 ```bash
 ansible wireguard -m command -a "cat /etc/wireguard/server_public.key" --become

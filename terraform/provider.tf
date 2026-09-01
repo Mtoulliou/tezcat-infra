@@ -6,7 +6,7 @@ terraform {
     }
     sops = {
       source  = "carlpett/sops"
-      version = "~> 1.1"       # vérifie la dernière sur registry.terraform.io
+      version = "~> 1.1" # vérifie la dernière sur registry.terraform.io
     }
     backend "http" {}
   }
