@@ -55,6 +55,7 @@
         state: present
       loop:
         - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAFCHB4hhuBpc9yUr7k4Aq46eiRgnFvcqpffme9B7eJ7 matteo@tezcat"
+        - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMMgukXFhXjvHd92wBeiFPUlwjts869BJsCDC9WbvhUV jules@tezcat"
         - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmGPyfqtTgJ06Mh2p+tyMiVunBjlEw5Pxu6XzwLWlZb maxime@tezcat" 
 
     - name: Durcir SSH (pas de root, pas de mot de passe)
