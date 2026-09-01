@@ -48,6 +48,15 @@
       ansible.builtin.command: timedatectl set-timezone Europe/Paris
       changed_when: false
 
+    - name: Déployer les clés SSH des administrateurs
+      ansible.posix.authorized_key:
+        user: tezcatadmin
+        key: "{{ item }}"
+        state: present
+      loop:
+        - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAFCHB4hhuBpc9yUr7k4Aq46eiRgnFvcqpffme9B7eJ7 matteo@tezcat"
+        - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmGPyfqtTgJ06Mh2p+tyMiVunBjlEw5Pxu6XzwLWlZb maxime@tezcat" 
+
     - name: Durcir SSH (pas de root, pas de mot de passe)
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/99-hardening.conf
